@@ -55,7 +55,7 @@ sha() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1;
 if [ -f "$jar" ] && { [ "$digest" = "-" ] || [ "$(sha "$jar")" = "$digest" ]; }; then
   echo "PlantUML $version ya estaba en $jar"
 else
-  echo "Descargando PlantUML $version…"
+  echo "Descargando PlantUML ${version}…"
   curl -fsSL -o "$jar.tmp" "$url"
   if [ "$digest" = "-" ]; then
     echo "aviso: GitHub no publica el SHA-256 de este archivo; no se pudo verificar" >&2
