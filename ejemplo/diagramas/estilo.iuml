@@ -1,0 +1,4 @@
+skinparam state {
+  BackgroundColor #EEF4FB
+  BorderColor #2F5D8A
+}

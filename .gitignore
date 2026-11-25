@@ -1,0 +1,4 @@
+/node_modules
+/ejemplo/_build
+/ejemplo/diagramas/plantuml-*.svg
+/salida

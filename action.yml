@@ -1,0 +1,121 @@
+name: PlantUML para MyST
+description: >-
+  Instala PlantUML (Java, Graphviz y el .jar oficial verificado) para el plugin plantuml-myst,
+  y opcionalmente dibuja de antemano todos los diagramas del proyecto, con caché entre builds.
+author: INGCOM-UNRN
+branding:
+  icon: git-branch
+  color: blue
+
+inputs:
+  plantuml-version:
+    description: Versión de PlantUML (p. ej. 1.2026.10) o "latest". Vacío usa la versión fijada en scripts/instalar-plantuml.sh.
+    default: ""
+  java-version:
+    description: Versión de Java (Temurin) a instalar. Vacío no instala Java (usa el del runner).
+    default: "21"
+  graphviz:
+    description: Instalar Graphviz (dot), que usan los diagramas de clases, componentes, estados, etc.
+    default: "true"
+  proyecto:
+    description: Directorio del proyecto MyST (con myst.yml). Si se indica, dibuja de antemano sus diagramas y guarda la caché entre builds.
+    default: ""
+  estricto:
+    description: Con "proyecto", falla si algún diagrama tiene errores.
+    default: "false"
+  plugin:
+    description: Ruta (relativa al workspace) donde copiar plantuml-myst.mjs, de la misma versión que la action. Vacío no copia nada.
+    default: ""
+
+outputs:
+  plantuml-jar:
+    description: Ruta al plantuml.jar instalado (también queda en la variable PLANTUML_JAR).
+    value: ${{ steps.instalar.outputs.jar }}
+  plantuml-version:
+    description: Versión de PlantUML instalada.
+    value: ${{ steps.instalar.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.java-version != ''
+      uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    - name: Graphviz
+      if: inputs.graphviz == 'true'
+      shell: bash
+      run: |
+        if command -v dot > /dev/null; then dot -V; exit 0; fi
+        case "$RUNNER_OS" in
+          Linux) sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends graphviz ;;
+          macOS) brew install graphviz ;;
+          Windows) choco install graphviz -y --no-progress ;;
+        esac
+
+    - name: Versión de PlantUML
+      id: version
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ inputs.plantuml-version }}
+      run: |
+        case "$VERSION" in
+          "") v=$(sed -n 's/^VERSION_FIJADA="\(.*\)"/\1/p' "$GITHUB_ACTION_PATH/scripts/instalar-plantuml.sh") ;;
+          latest) v=$(gh api repos/plantuml/plantuml/releases/latest --jq .tag_name) ;;
+          *) v="$VERSION" ;;
+        esac
+        echo "version=${v#v}" >> "$GITHUB_OUTPUT"
+
+    - name: Caché del .jar
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.tool_cache }}/plantuml
+        key: plantuml-jar-${{ runner.os }}-${{ steps.version.outputs.version }}
+
+    - name: PlantUML
+      id: instalar
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        set -euo pipefail
+        bin="$RUNNER_TEMP/plantuml-bin"
+        salida=$(bash "$GITHUB_ACTION_PATH/scripts/instalar-plantuml.sh" --dir "$RUNNER_TOOL_CACHE/plantuml" --bin "$bin" $VERSION 2> >(grep -v "no está en el PATH" >&2))
+        echo "$salida"
+        jar=$(sed -n 's/^PLANTUML_JAR=//p' <<<"$salida")
+        version=$(sed -n 's/^PLANTUML_VERSION=//p' <<<"$salida")
+        echo "$bin" >> "$GITHUB_PATH"
+        echo "PLANTUML_JAR=$jar" >> "$GITHUB_ENV"
+        echo "jar=$jar" >> "$GITHUB_OUTPUT"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        "$bin/plantuml" -version | head -1
+
+    - name: Plugin
+      if: inputs.plugin != ''
+      shell: bash
+      env:
+        DESTINO: ${{ inputs.plugin }}
+      run: |
+        mkdir -p "$(dirname "$DESTINO")"
+        cp "$GITHUB_ACTION_PATH/src/plantuml-myst.mjs" "$DESTINO"
+        echo "plantuml-myst $(sed -n 's/^export const VERSION = "\(.*\)";/\1/p' "$DESTINO") → $DESTINO"
+
+    - name: Caché de los diagramas
+      if: inputs.proyecto != ''
+      uses: actions/cache@v6
+      with:
+        path: ${{ inputs.proyecto }}/_build/plantuml
+        key: plantuml-diagramas-${{ runner.os }}-${{ steps.instalar.outputs.version }}-${{ hashFiles(format('{0}/**/*.md', inputs.proyecto), format('{0}/**/*.puml', inputs.proyecto), format('{0}/**/*.iuml', inputs.proyecto)) }}
+        restore-keys: plantuml-diagramas-${{ runner.os }}-${{ steps.instalar.outputs.version }}-
+
+    - name: Dibujar los diagramas
+      if: inputs.proyecto != ''
+      shell: bash
+      env:
+        PROYECTO: ${{ inputs.proyecto }}
+        ESTRICTO: ${{ inputs.estricto == 'true' && '--estricto' || '' }}
+      run: node "$GITHUB_ACTION_PATH/scripts/prerenderizar.mjs" $ESTRICTO "$PROYECTO"

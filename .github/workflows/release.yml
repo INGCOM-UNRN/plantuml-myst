@@ -1,0 +1,78 @@
+# Publica un release: el plugin (plantuml-myst.mjs) con SHA256SUMS, para cargarlo por URL o
+# con scripts/actualizar-sitio.sh --release, y el tag sirve de versión de la action:
+#   uses: INGCOM-UNRN/plantuml-myst@v0.1.0
+# Crear el release:  git tag v0.1.0 && git push origin v0.1.0
+# El tag tiene que coincidir con package.json y con VERSION en src/plantuml-myst.mjs.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: read
+
+jobs:
+  preparar:
+    name: Validar versión
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          npm_v=$(node -p 'require("./package.json").version')
+          src_v=$(sed -n 's/^export const VERSION = "\(.*\)";/\1/p' src/plantuml-myst.mjs)
+          echo "tag=$version package.json=$npm_v src=$src_v"
+          if [ "$version" != "$npm_v" ] || [ "$version" != "$src_v" ]; then
+            echo "::error::El tag $GITHUB_REF_NAME no coincide con las versiones declaradas"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  pruebas:
+    needs: preparar
+    uses: ./.github/workflows/ci.yml
+
+  publicar:
+    name: Publicar release
+    needs: [preparar, pruebas]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Archivos y notas
+        run: |
+          set -euo pipefail
+          mkdir -p dist && cp src/plantuml-myst.mjs dist/
+          (cd dist && sha256sum plantuml-myst.mjs > SHA256SUMS)
+          plantuml=$(sed -n 's/^VERSION_FIJADA="\(.*\)"/\1/p' scripts/instalar-plantuml.sh)
+          cat > NOTAS.md <<NOTAS
+          plantuml-myst ${{ needs.preparar.outputs.version }} (PlantUML fijado: $plantuml).
+
+          En el workflow del sitio:
+
+          \`\`\`yaml
+          - uses: ${{ github.repository }}@$GITHUB_REF_NAME
+            with:
+              proyecto: .
+          \`\`\`
+
+          y en el \`myst.yml\`, el plugin (copiado en el sitio, o por URL):
+
+          \`\`\`yaml
+          project:
+            plugins:
+              - https://github.com/${{ github.repository }}/releases/download/$GITHUB_REF_NAME/plantuml-myst.mjs
+          \`\`\`
+          NOTAS
+      - name: Crear el release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/plantuml-myst.mjs dist/SHA256SUMS \
+            --title "plantuml-myst $GITHUB_REF_NAME" --notes-file NOTAS.md --verify-tag

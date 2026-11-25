@@ -1,0 +1,9 @@
+@startuml
+!include estilo.iuml
+[*] --> Listo
+Listo --> Ejecutando : planificador
+Ejecutando --> Listo : interrupción
+Ejecutando --> Bloqueado : E/S
+Bloqueado --> Listo : fin de E/S
+Ejecutando --> [*] : exit
+@enduml

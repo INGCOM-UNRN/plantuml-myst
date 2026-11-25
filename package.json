@@ -1,0 +1,18 @@
+{
+  "name": "plantuml-myst",
+  "version": "0.1.0",
+  "description": "Plugin de MyST (mystmd) y GitHub Action para dibujar diagramas de PlantUML",
+  "type": "module",
+  "main": "src/plantuml-myst.mjs",
+  "exports": "./src/plantuml-myst.mjs",
+  "files": ["src/plantuml-myst.mjs", "scripts", "action.yml", "README.md", "LICENSE"],
+  "license": "GPL-3.0-or-later",
+  "repository": { "type": "git", "url": "https://github.com/INGCOM-UNRN/plantuml-myst" },
+  "keywords": ["myst", "mystmd", "plugin", "plantuml", "uml", "diagrams", "github-action"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test pruebas/*.test.mjs",
+    "test:sitio": "bash scripts/probar-sitio.sh",
+    "prerenderizar": "node scripts/prerenderizar.mjs"
+  }
+}

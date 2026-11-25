@@ -1,0 +1,82 @@
+# Prueba la action de este repositorio (uses: ./) tal como la usaría un sitio, el plugin y el
+# script de pre-renderizado, y construye el sitio de ejemplo con mystmd.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      plantuml-version:
+        description: Versión de PlantUML (vacío = la fijada; "latest" = la última)
+        default: ""
+  workflow_call:
+    inputs:
+      plantuml-version:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  probar:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Sintaxis
+        shell: bash
+        run: |
+          for f in src/*.mjs scripts/*.mjs pruebas/*.mjs; do node --check "$f"; done
+          for f in scripts/*.sh; do bash -n "$f"; done
+      - name: Action (PlantUML, plugin y pre-renderizado del ejemplo)
+        id: plantuml
+        uses: ./
+        with:
+          plantuml-version: ${{ inputs.plantuml-version }}
+          proyecto: ejemplo
+          estricto: "true"
+          plugin: salida/plugin/plantuml-myst.mjs
+      - name: La action dejó el plugin y PLANTUML_JAR
+        shell: bash
+        run: |
+          cmp src/plantuml-myst.mjs salida/plugin/plantuml-myst.mjs
+          test -f "$PLANTUML_JAR"
+          plantuml -version | head -1
+          echo "PlantUML ${{ steps.plantuml.outputs.plantuml-version }}: ${{ steps.plantuml.outputs.plantuml-jar }}"
+      - name: Pruebas
+        run: npm test
+      - name: Sitio de ejemplo
+        shell: bash
+        run: |
+          npm install -g mystmd
+          myst --version
+          bash scripts/probar-sitio.sh
+      - name: Resumen
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          {
+            echo "### plantuml-myst"
+            echo "- PlantUML: ${{ steps.plantuml.outputs.plantuml-version }}"
+            echo "- mystmd: $(myst --version)"
+            echo "- Java: $(java -version 2>&1 | head -1)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ejemplo
+          path: ejemplo/_build/site

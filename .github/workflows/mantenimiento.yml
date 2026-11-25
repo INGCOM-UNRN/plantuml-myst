@@ -1,0 +1,34 @@
+# Los lunes: prueba todo con la última versión de PlantUML (para saber a tiempo si hay que
+# actualizar la versión fijada en scripts/instalar-plantuml.sh) y avisa si hay una nueva.
+name: Mantenimiento
+
+on:
+  schedule:
+    - cron: "53 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ultima:
+    name: PlantUML latest
+    uses: ./.github/workflows/ci.yml
+    with:
+      plantuml-version: latest
+
+  version:
+    name: ¿Hay una versión nueva de PlantUML?
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          fijada=$(sed -n 's/^VERSION_FIJADA="\(.*\)"/\1/p' scripts/instalar-plantuml.sh)
+          ultima=$(gh api repos/plantuml/plantuml/releases/latest --jq '.tag_name' | sed 's/^v//')
+          echo "fijada: $fijada, última: $ultima"
+          if [ "$fijada" != "$ultima" ]; then
+            echo "::warning::Hay una versión nueva de PlantUML: $ultima (fijada: $fijada). Actualizá VERSION_FIJADA en scripts/instalar-plantuml.sh."
+            echo "PlantUML **$ultima** disponible (fijada: $fijada)." >> "$GITHUB_STEP_SUMMARY"
+          fi

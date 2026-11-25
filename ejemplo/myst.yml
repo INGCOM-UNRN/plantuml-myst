@@ -1,0 +1,13 @@
+# Sitio de ejemplo y de prueba del plugin. Se construye con scripts/probar-sitio.sh.
+version: 1
+project:
+  title: plantuml-myst
+  description: Diagramas de PlantUML en MyST
+  plugins:
+    # En un sitio propio: plugins/plantuml-myst.mjs (ver README).
+    - ../src/plantuml-myst.mjs
+  toc:
+    - file: index.md
+    - file: diagramas.md
+site:
+  template: book-theme
