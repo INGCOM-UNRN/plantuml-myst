@@ -102,6 +102,10 @@ Un bloque `plantuml` o `puml`; `@startuml`/`@enduml` son opcionales. Otros tipos
 ```
 ````
 
+Para mostrar el código de un diagrama sin dibujarlo (una guía de PlantUML, por ejemplo), usá
+`{code}`: los bloques ```` ```{code} plantuml ```` y ```` ```{code-block} plantuml ```` quedan
+como código.
+
 La directiva `{plantuml}` (alias `{uml}`) agrega opciones. Con `:caption:` o `:label:` el
 diagrama es una figura numerada que se puede referenciar:
 

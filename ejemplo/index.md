@@ -25,5 +25,15 @@ Otros tipos de diagrama usan su propio `@start…`:
 @endmindmap
 ```
 
+Para *mostrar* el código de un diagrama sin dibujarlo (por ejemplo, en una guía de
+PlantUML), usá la directiva `{code}`:
+
+```{code} plantuml
+:caption: El código, sin dibujar.
+@startuml
+Alice -> Bob : hola
+@enduml
+```
+
 En [](diagramas.md) están la directiva `{plantuml}`, las figuras numeradas y los diagramas en
 archivos aparte.

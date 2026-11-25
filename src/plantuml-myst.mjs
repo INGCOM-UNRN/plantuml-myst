@@ -8,7 +8,8 @@
 //       - plugins/plantuml-myst.mjs
 //
 // Dibuja:
-//   - los bloques de código ```plantuml y ```puml (con o sin @startuml/@enduml);
+//   - los bloques de código ```plantuml y ```puml (con o sin @startuml/@enduml); los de
+//     ```{code} plantuml se dejan como código, para mostrar la sintaxis;
 //   - la directiva {plantuml} (alias {uml}), con :theme:, :width:, :align:, :alt:, :class:,
 //     :caption: y :label:, y opcionalmente un archivo .puml como argumento.
 //
@@ -266,15 +267,42 @@ function nodoError(fuente, mensaje) {
   };
 }
 
+const DIRECTIVA_DE_CODIGO = /\{(code|code-block|code-cell|sourcecode|literalinclude)\}/;
+
+/**
+ * Si un bloque de código plantuml/puml es para dibujar. Los de la directiva {plantuml} y los
+ * bloques con valla (```plantuml) sí; los de {code} / {code-block} no: muestran el código
+ * (por ejemplo, en una guía de PlantUML). mystmd no deja marca de la directiva en el nodo,
+ * pero sus salidas no tienen posición, y si la tienen, la línea de la fuente lo dice.
+ */
+export function esParaDibujar(nodo, lineas) {
+  if (nodo.plantuml) return true;
+  const n = nodo.position?.start?.line;
+  if (!n) return false;
+  const linea = lineas?.[n - 1];
+  return linea === undefined || !DIRECTIVA_DE_CODIGO.test(linea);
+}
+
+function lineasDe(vfile) {
+  try {
+    return vfile?.path ? fs.readFileSync(vfile.path, "utf8").split(/\r?\n/) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Los bloques a dibujar del árbol: [{padre, indice, nodo}]. */
-function buscar(arbol) {
+function buscar(arbol, vfile) {
   const encontrados = [];
+  let lineas;
   (function recorrer(nodo) {
     const hijos = nodo.children;
     if (!Array.isArray(hijos)) return;
     hijos.forEach((h, i) => {
-      if (h.type === "code" && LENGUAJES.includes(h.lang)) encontrados.push({ padre: hijos, indice: i, nodo: h });
-      else recorrer(h);
+      if (h.type === "code" && LENGUAJES.includes(h.lang)) {
+        if (lineas === undefined) lineas = lineasDe(vfile);
+        if (esParaDibujar(h, lineas)) encontrados.push({ padre: hijos, indice: i, nodo: h });
+      } else recorrer(h);
     });
   })(arbol);
   return encontrados;
@@ -285,7 +313,7 @@ function buscar(arbol) {
  * sus diagramas, dibujados en un solo lote. Devuelve la cantidad de diagramas.
  */
 export function transformarArbol(arbol, vfile) {
-  const bloques = buscar(arbol);
+  const bloques = buscar(arbol, vfile);
   if (!bloques.length) return 0;
   const dir = vfile?.path ? path.dirname(path.resolve(vfile.path)) : process.cwd();
   let resultados;

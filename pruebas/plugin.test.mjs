@@ -8,10 +8,12 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import plugin, { preparar, prepararFuente, dibujarLote, transformarArbol, estadisticas, clave, textoAlternativo } from "../src/plantuml-myst.mjs";
+import plugin, { esParaDibujar, preparar, prepararFuente, dibujarLote, transformarArbol, estadisticas, clave, textoAlternativo } from "../src/plantuml-myst.mjs";
 import { extraerDiagramas } from "../scripts/prerenderizar.mjs";
 
 const RAIZ = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+// Un bloque con valla, como lo deja mystmd (con posición en el archivo).
+const bloque = (lang, value, line = 1) => ({ type: "code", lang, value, position: { start: { line, column: 1 } } });
 const temporal = () => fs.mkdtempSync(path.join(os.tmpdir(), "plantuml-myst-"));
 
 beforeEach(() => {
@@ -123,8 +125,8 @@ test("transformarArbol: imágenes, error fatal y opciones de la directiva", () =
   const arbol = {
     type: "root",
     children: [
-      { type: "block", children: [{ type: "code", lang: "plantuml", value: "A -> B" }, { type: "code", lang: "python", value: "x" }] },
-      { type: "code", lang: "puml", value: "class A\nA <|-- B\n\nmal ->>> mal", position: { start: { line: 7 } } },
+      { type: "block", children: [bloque("plantuml", "A -> B"), bloque("python", "x")] },
+      bloque("puml", "class A\nA <|-- B\n\nmal ->>> mal", 7),
       figura,
     ],
   };
@@ -167,7 +169,7 @@ test("la directiva con archivo resuelve los !include desde el archivo", () => {
 test("PLANTUML_MYST_SALIDA=diagramas escribe los SVG al lado de la página", () => {
   const dir = temporal();
   process.env.PLANTUML_MYST_SALIDA = "diagramas";
-  const arbol = { type: "root", children: [{ type: "code", lang: "plantuml", value: "A -> B" }] };
+  const arbol = { type: "root", children: [bloque("plantuml", "A -> B")] };
   transformarArbol(arbol, vfileEn(dir));
   const url = arbol.children[0].url;
   assert.match(url, /^diagramas\/plantuml-[0-9a-f]{20}\.svg$/);
@@ -187,6 +189,24 @@ test("sin PlantUML, el error explica cómo instalarlo", () => {
     if (cmd) process.env.PLANTUML = cmd;
     else delete process.env.PLANTUML;
   }
+});
+
+test("los bloques de {code} plantuml se dejan como código", () => {
+  const dir = temporal();
+  const md = ["# Guía", "", "```plantuml", "A -> B", "```", "", "```{code} plantuml", ":caption: x", "A -> C", "```", ""].join("\n");
+  fs.writeFileSync(path.join(dir, "guia.md"), md);
+  const lineas = md.split("\n");
+  assert.equal(esParaDibujar(bloque("plantuml", "A -> B", 3), lineas), true);
+  assert.equal(esParaDibujar(bloque("plantuml", "A -> C", 7), lineas), false, "{code} con posición");
+  assert.equal(esParaDibujar({ type: "code", lang: "plantuml", value: "A -> C" }, lineas), false, "{code} sin posición");
+  assert.equal(esParaDibujar({ type: "code", lang: "plantuml", value: "x", plantuml: {} }, lineas), true, "directiva {plantuml}");
+  const arbol = {
+    type: "root",
+    children: [bloque("plantuml", "A -> B", 3), { type: "container", kind: "code", children: [{ type: "code", lang: "plantuml", value: "A -> C" }] }],
+  };
+  assert.equal(transformarArbol(arbol, vfileEn(dir, "guia.md")), 1);
+  assert.equal(arbol.children[0].type, "image");
+  assert.equal(arbol.children[1].children[0].type, "code");
 });
 
 test("textoAlternativo usa el título o el tipo", () => {

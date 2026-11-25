@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Construye el sitio de ejemplo con mystmd y verifica que el plugin haya dibujado todo:
-# ningún bloque plantuml/puml sin dibujar, cada figura con su etiqueta, ninguna advertencia
+# ningún bloque plantuml/puml sin dibujar (salvo el de {code}, que muestra el código), cada figura con su etiqueta, ninguna advertencia
 # de PlantUML, y que el build haya usado los diagramas que dejó scripts/prerenderizar.mjs.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,12 +15,12 @@ python3 - <<'PY'
 import glob, json, os, sys
 paginas = glob.glob("_build/site/content/*.json")
 assert paginas, "no se generó el contenido del sitio"
-imagenes, etiquetas, errores = 0, set(), []
+imagenes, etiquetas, errores, codigo = 0, set(), [], []
 def recorrer(n, pagina):
     global imagenes
     t = n.get("type")
     if t == "code" and n.get("lang") in ("plantuml", "puml"):
-        errores.append(f"{pagina}: bloque {n.get('lang')} sin dibujar")
+        codigo.append(f"{pagina}: {n.get('value', '').splitlines()[1:2]}")
     if t == "mystDirective" or (t == "admonition" and n.get("kind") == "danger"):
         errores.append(f"{pagina}: {t} sin procesar o con error")
     if t == "container" and n.get("kind") == "figure" and n.get("label"):
@@ -37,6 +37,9 @@ for p in paginas:
 print(f"páginas: {len(paginas)}, diagramas: {imagenes}, figuras: {sorted(etiquetas)}")
 if imagenes < 5:
     errores.append(f"se esperaban al menos 5 diagramas, hay {imagenes}")
+# Sólo el bloque de {code} plantuml del ejemplo queda como código.
+if len(codigo) != 1:
+    errores.append(f"se esperaba 1 bloque plantuml como código ({{code}}), hay {len(codigo)}: {codigo}")
 for e in ("fig-clases", "fig-estados"):
     if e not in etiquetas:
         errores.append(f"falta la figura {e}")
